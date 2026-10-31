@@ -142,6 +142,12 @@ tbody tr.hit-danger { box-shadow:inset 3px 0 0 var(--orange); }
   background:var(--panel-bg); display:flex; flex-direction:column; min-width:0;
 }
 #chartPanel.hidden { display:none; }
+#chartPicker { display:none; align-items:center; gap:4px; }
+#chartPickSelect {
+  padding:4px 8px; background:var(--bg); border:1px solid var(--border); color:var(--text);
+  border-radius:4px; font-size:12px; font-family:'Consolas',monospace; max-width:160px;
+}
+#chartPickSelect:focus { border-color:var(--yellow); outline:none; }
 #chartHeader { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); flex-shrink:0; }
 #chartSym { font-weight:700; font-size:14px; letter-spacing:0.4px; white-space:nowrap; }
 #chartLevelTag { font-size:11px; color:var(--text-secondary); border:1px solid var(--border); border-radius:3px; padding:1px 5px; white-space:nowrap; }
@@ -224,6 +230,59 @@ tbody tr.selected-row td.sym-col { color:var(--yellow); }
   tbody td { font-size:11px; padding:4px 2px; }
   .lvl-btn { padding:6px 9px; font-size:12px; min-width:40px; }
 }
+
+/* ── 全铺模式：K线图占满整个内容区，表格收起 ── */
+body.chart-full #tableWrapper { display:none; }
+body.chart-full #chartPanel { width:auto; flex:1 1 auto; border-left:none; }
+body.chart-full #chartCanvasWrap { min-height:260px; }
+body.chart-full #chartPicker { display:flex; }
+body.chart-full #toastContainer { right:16px; }
+body.chart-full #chartStat { font-size:11px; }
+@media (max-width:1100px) {
+  body.chart-full #chartPanel {
+    position:static; inset:auto; z-index:auto; width:auto; flex:1 1 auto; box-shadow:none;
+  }
+}
+
+/* ── 平铺模式：多张K线图网格平铺 ── */
+#tileView { display:none; flex:1; flex-direction:column; min-width:0; background:var(--bg); }
+body.tile-mode #tableWrapper { display:none; }
+body.tile-mode #chartPanel { display:none; }
+body.tile-mode #tileView { display:flex; }
+body.tile-mode #toastContainer { right:16px; }
+#tileBar {
+  display:flex; align-items:center; gap:6px; padding:6px 10px; border-bottom:1px solid var(--border);
+  font-size:12px; color:var(--text-secondary); flex-shrink:0; flex-wrap:wrap; background:rgba(0,0,0,0.15);
+}
+#tileBar .sep { color:var(--border); margin:0 2px; }
+#tileBar .chk { font-size:12px; color:var(--text-secondary); display:flex; align-items:center; gap:4px; cursor:pointer; }
+#tileGrid {
+  flex:1; display:grid; gap:6px; padding:6px; min-height:0; grid-auto-rows:1fr;
+  overflow-y:auto; overflow-x:hidden; align-content:start;
+}
+#tileGrid::-webkit-scrollbar { width:8px; }
+#tileGrid::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+#tileGrid::-webkit-scrollbar-thumb:hover { background:#3a414d; }
+#tileGrid::-webkit-scrollbar-track { background:transparent; }
+.tile {
+  position:relative; background:var(--panel-bg); border:1px solid var(--border); border-radius:6px;
+  overflow:hidden; min-width:0; min-height:0; cursor:pointer; transition:border-color 0.15s;
+}
+.tile:hover { border-color:var(--yellow); }
+.tile-head {
+  position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:6px;
+  padding:4px 7px; font-size:12px; font-family:'Consolas',monospace;
+  background:linear-gradient(180deg, rgba(20,23,29,0.92) 0%, rgba(20,23,29,0) 100%);
+  z-index:2; pointer-events:none; white-space:nowrap; overflow:hidden;
+}
+.tile-rank { color:var(--text-secondary); font-size:10px; }
+.tile-sym { font-weight:700; letter-spacing:0.3px; font-size:13px; }
+.tile-gain { margin-left:auto; font-weight:700; font-size:12px; }
+.tile canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+@media (max-width:700px) {
+  #tileGrid { gap:4px; padding:4px; }
+  .tile-head { font-size:10px; }
+}
 </style>
 </head>
 <body>
@@ -245,6 +304,9 @@ tbody tr.selected-row td.sym-col { color:var(--yellow); }
       <span id="connectionDot" title="WebSocket"></span>
       <span id="pairCount" style="color:var(--text-secondary)">币种: 0</span>
       <button class="btn" id="chartToggleBtn" onclick="app.toggleChart()" title="显示/隐藏右侧K线图">📈 图表</button>
+      <button class="btn" id="chartFullBtn" onclick="app.toggleChartFull()" title="单张K线图铺满（表格收起，F 键）">⛶ 单图</button>
+      <button class="btn" id="tileBtn" onclick="app.toggleTile()" title="多张K线图网格平铺，同时看多个币（T 键）">🔲 平铺</button>
+      <button class="btn active" id="voiceBtn" onclick="app.toggleVoice()" title="语音播报">🗣️</button>
       <button class="btn" id="muteBtn" onclick="app.toggleMute()" title="静音/取消静音">🔊</button>
       <button class="btn" id="alertListBtn" onclick="app.toggleAlertPanel()">🔔<span id="alertBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:0 6px;margin-left:4px;font-size:10px;">0</span></button>
       <button class="btn" onclick="app.manualRefresh()" title="重新拉取币种与行情">🔄 刷新</button>
@@ -262,6 +324,7 @@ tbody tr.selected-row td.sym-col { color:var(--yellow); }
     <div class="stat-item"><span class="stat-label">高危涨幅:</span><span class="stat-val" style="color:var(--orange)" id="statDanger">0</span></div>
     <div class="stat-item"><span class="stat-label">告警记录:</span><span class="stat-val" style="color:var(--yellow)" id="statAlerts">0</span></div>
     <div class="stat-item"><span class="stat-label">数据源:</span><span class="stat-val" id="statWs">--</span></div>
+    <div class="stat-item"><span class="stat-label">权重:</span><span class="stat-val" id="statWeight" title="最近 60 秒已用权重 / 每分钟预算（币安上限 2400）">--</span></div>
     <div class="stat-item"><span class="stat-label">最近更新:</span><span class="stat-val" id="statUpdate">--</span></div>
   </div>
 
@@ -288,6 +351,16 @@ tbody tr.selected-row td.sym-col { color:var(--yellow); }
     <button class="btn active" data-macdfilter="all" onclick="app.setMacdFilter('all')">全部</button>
     <button class="btn" data-macdfilter="above" onclick="app.setMacdFilter('above')" title="只显示当前级别 MACD DIF &gt; 0（零轴上方）的币">零轴上</button>
     <button class="btn" data-macdfilter="below" onclick="app.setMacdFilter('below')" title="只显示当前级别 MACD DIF &lt; 0（零轴下方）的币">零轴下</button>
+    <span class="sep">│</span>
+
+    <span class="grp-label">成交额:</span>
+    <select id="minVolSelect" onchange="app.setMinVol(parseFloat(this.value))" title="24h 成交额门槛：门槛越高，候选币越少、请求越轻，越不容易被限流">
+      <option value="1000000">≥100万</option>
+      <option value="3000000">≥300万</option>
+      <option value="5000000">≥500万</option>
+      <option value="10000000">≥1000万</option>
+      <option value="30000000">≥3000万</option>
+    </select>
     <span class="sep">│</span>
 
     <span class="grp-label">阈值:</span>
@@ -317,7 +390,13 @@ tbody tr.selected-row td.sym-col { color:var(--yellow); }
       <div id="chartHeader">
         <span id="chartSym">--</span>
         <span id="chartLevelTag">--</span>
+        <span id="chartPicker">
+          <button class="btn" onclick="app.stepChart(-1)" title="上一个（按榜内顺序）">◀</button>
+          <select id="chartPickSelect" onchange="app.pickChartSymbol(this.value)" title="从榜单里选币"></select>
+          <button class="btn" onclick="app.stepChart(1)" title="下一个（按榜内顺序）">▶</button>
+        </span>
         <span id="chartGain">--</span>
+        <button class="btn" id="chartFullInnerBtn" onclick="app.toggleChartFull()" title="全铺 / 分栏切换">⛶</button>
         <button class="btn" onclick="app.toggleChart()" title="收起图表 (也可以点顶部 📈 图表)">✕</button>
       </div>
       <div id="chartMeta">
@@ -339,6 +418,33 @@ tbody tr.selected-row td.sym-col { color:var(--yellow); }
         </span>
       </div>
     </aside>
+
+    <!-- 平铺模式：多张K线图网格 -->
+    <div id="tileView">
+      <div id="tileBar">
+        <span style="color:var(--text-secondary);">平铺数量:</span>
+        <button class="btn" data-tiles="4" onclick="app.setTileCount(4)">4</button>
+        <button class="btn" data-tiles="6" onclick="app.setTileCount(6)">6</button>
+        <button class="btn active" data-tiles="9" onclick="app.setTileCount(9)">9</button>
+        <button class="btn" data-tiles="12" onclick="app.setTileCount(12)">12</button>
+        <button class="btn" data-tiles="16" onclick="app.setTileCount(16)">16</button>
+        <button class="btn" data-tiles="25" onclick="app.setTileCount(25)">25</button>
+        <button class="btn" data-tiles="50" onclick="app.setTileCount(50)">50</button>
+        <span class="sep">│</span>
+        <span style="color:var(--text-secondary);">列数:</span>
+        <button class="btn" data-col="3" onclick="app.setTileCols(3)" title="一行 3 个，图更宽">3</button>
+        <button class="btn active" data-col="4" onclick="app.setTileCols(4)" title="一行 4 个">4</button>
+        <button class="btn" data-col="5" onclick="app.setTileCols(5)" title="一行 5 个，图更小">5</button>
+        <span class="sep">│</span>
+        <label class="chk"><input type="checkbox" id="tileMacd" onchange="app.toggleTileMacd()"> 图内 MACD</label>
+        <span class="sep">│</span>
+        <span style="color:var(--text-secondary);">一行 4 个 · 榜单前 N 名实时重排 · 图多时可下拉 · 点图块 → 单图</span>
+        <span style="margin-left:auto;display:flex;gap:6px;">
+          <button class="btn" onclick="app.toggleTile(false)">◧ 分栏</button>
+        </span>
+      </div>
+      <div id="tileGrid"></div>
+    </div>
   </div>
 </div>
 
@@ -370,6 +476,24 @@ tbody tr.selected-row td.sym-col { color:var(--yellow); }
     <div style="margin-top:12px;">
       <label style="display:inline-block;"><input type="checkbox" id="soundEnabled" checked> 启用声音告警</label>
       <label style="display:inline-block;margin-left:16px;"><input type="checkbox" id="notifyEnabled" checked> 启用浏览器通知</label>
+    </div>
+
+    <!-- 语音播报 -->
+    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
+      <h4 style="font-size:14px;color:var(--yellow);margin-bottom:6px;">🗣️ 语音播报</h4>
+      <label style="display:inline-block;"><input type="checkbox" id="voiceEnabled"> 启用语音播报（告警时朗读币种/级别/方向/涨幅）</label>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:12px;color:var(--text-secondary);">播报最低级别</span>
+        <select id="voiceMinLevel">
+          <option value="warn">⚠️ 警告及以上</option>
+          <option value="danger">🔶 高危及以上</option>
+          <option value="extreme">🔴 仅极端</option>
+        </select>
+        <span style="font-size:12px;color:var(--text-secondary);">语速</span>
+        <input type="number" id="voiceRate" min="0.5" max="2" step="0.05">
+        <button class="btn" onclick="app.testVoice()" style="font-size:11px;">🔊 试听</button>
+      </div>
+      <div class="hint" id="voiceHint" style="font-size:10px;color:var(--text-secondary);margin-top:6px;">使用浏览器内置语音合成（Web Speech API），离线可用，自动挑中文音色。</div>
     </div>
 
     <!-- 钉钉推送 -->
@@ -413,7 +537,7 @@ const CONFIG = {
   REST: 'https://fapi.binance.com/fapi/v1',
   WS: 'wss://fstream.binance.com/stream',
   WS_CHUNK: 200,          // 每条 WS 连接的 stream 数量
-  MIN_QUOTE_VOL: 1e6,     // 候选池门槛：24h 成交额 ≥ 100 万 USDT
+  MIN_QUOTE_VOL: 5e6,     // 候选池默认门槛：24h 成交额 ≥ 500 万 USDT（可在工具栏调整）
   UNIVERSE_CAP: 520,
   MACD_WARM: 60,          // 每个币预取多少个级别K线用于 MACD 预热
   LEVELS: ['10m','15m','30m','1h','2h','3h','4h','6h','12h','24h'],
@@ -465,6 +589,8 @@ const STATE = {
   rankDir: 'up',           // 'up' = 涨幅榜, 'down' = 跌幅榜
   sortKey: 'rank',         // 'rank' | 'symbol' | 'price' | 'gain' | 'chg' | 'vol'
   sortAsc: true,
+  minVol: parseFloat(localStorage.getItem('gain_board_min_vol')) || 5000000,   // 候选池门槛：24h 成交额
+  volMap: {},               // 全部永续合约的 24h 成交额（改门槛时免请求重算）
   universe: [],
   universeSet: new Set(),
   displayed: [],
@@ -489,6 +615,8 @@ const STATE = {
   scanToken: 0,
   epoch: 0,              // 级别切换/刷新时 +1，作废所有在途请求
   prefill: { active:false, done:0, total:0 },
+  prefillMacd: { active:false, done:0, total:0 },   // 阶段2：MACD 历史
+  macdPending: {},
   alertsArmed: false,
   armedOnce: false,
   restFixQueue: new Set(),
@@ -496,6 +624,10 @@ const STATE = {
   muted: false,
   soundEnabled: true,
   notifyEnabled: true,
+  voiceEnabled: localStorage.getItem('gain_board_voice') !== '0',   // 语音播报
+  voiceMinLevel: localStorage.getItem('gain_board_voice_level') || 'danger',
+  voiceRate: parseFloat(localStorage.getItem('gain_board_voice_rate')) || 1.15,
+  voiceSupported: true,
   dingtalkEnabled: false,
   dingtalkWebhook: '',
   dingtalkCorsProxy: '',
@@ -508,6 +640,15 @@ const STATE = {
   chartVisible: 70,         // 显示多少根
   chartHover: null,
   chartPanelOpen: true,
+  chartFull: localStorage.getItem('gain_board_chart_full') === '1',   // 单图铺满模式
+  tileMode: false,          // 平铺模式（多图网格）
+  tileCount: parseInt(localStorage.getItem('gain_board_tile_count'), 10) || 9,
+  tileMacd: localStorage.getItem('gain_board_tile_macd') !== '0',
+  tileSyms: [],             // 当前平铺的币种
+  tileHist: {},             // sym -> 已收盘的级别K线（历史）
+  tileBars: 80,             // 每张小图画多少根
+  tileCols: parseInt(localStorage.getItem('gain_board_tile_cols'), 10) || 4,   // 一行几张（3=更宽）
+  tilePending: {},          // 正在拉取历史的币
   chartLoading: false,
   chartMacd: true,          // 下方 MACD 副图
   macdParams: { fast: 12, slow: 26, signal: 9 },
@@ -566,6 +707,9 @@ function fmtLeft(msLeft) {
   return h > 0 ? (h + ':' + pad2(m) + ':' + pad2(ss)) : (pad2(m) + ':' + pad2(ss));
 }
 function levelInfo() { return CONFIG.LEVEL_INFO[STATE.level]; }
+function stateVoiceMinLabel() {
+  return STATE.voiceMinLevel === 'warn' ? '警告及以上' : STATE.voiceMinLevel === 'extreme' ? '仅极端' : '高危及以上';
+}
 function bucketStartOf(ms, lv) { return Math.floor(ms / CONFIG.LEVEL_INFO[lv].ms) * CONFIG.LEVEL_INFO[lv].ms; }
 
 function showToast(msg, isError) {
@@ -604,6 +748,89 @@ const SoundManager = {
     this.playBeep(1200,0.09,'sawtooth'); setTimeout(()=>this.playBeep(1400,0.09,'sawtooth'),90);
     setTimeout(()=>this.playBeep(1600,0.12,'sawtooth'),180); setTimeout(()=>this.playBeep(1400,0.12,'sawtooth'),300);
     setTimeout(()=>this.playBeep(1200,0.16,'sawtooth'),420);
+  },
+};
+
+// ==================== VOICE (语音播报) ====================
+// 用浏览器内置 Web Speech API，离线可用；自动挑中文音色
+const VoiceManager = {
+  _pick: null,
+  _queue: [],
+  _speaking: false,
+  _rank: { warn: 0, danger: 1, extreme: 2 },
+  init() {
+    if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      STATE.voiceSupported = false;
+      return;
+    }
+    STATE.voiceSupported = true;
+    const self = this;
+    const load = () => {
+      let vs = [];
+      try { vs = speechSynthesis.getVoices() || []; } catch(e) { vs = []; }
+      if (!vs.length) return;
+      self._pick =
+        vs.find(v => /zh[-_]?CN/i.test(v.lang) && /Xiaoxiao|Yaoyao|Huihui|Kangkang|Tingting|Mei|Yun|Xiaoyi|Sinji/i.test(v.name)) ||
+        vs.find(v => /zh[-_]?CN|Chinese \(China\)|中文|普通话/i.test(v.lang + ' ' + v.name)) ||
+        vs.find(v => /^zh/i.test(v.lang)) || null;
+    };
+    load();
+    try { speechSynthesis.onvoiceschanged = load; } catch(e) {}
+    setTimeout(load, 500);
+    setTimeout(load, 1500);
+  },
+  supported() { return STATE.voiceSupported && ('speechSynthesis' in window); },
+  voiceName() { return this._pick ? (this._pick.name + ' (' + this._pick.lang + ')') : '浏览器默认音色'; },
+  cancel() {
+    this._queue = [];
+    this._speaking = false;
+    try { speechSynthesis.cancel(); } catch(e) {}
+  },
+  // severity: 'warn' | 'danger' | 'extreme'；force=true 时忽略最低级别限制（试听/开关提示用）
+  speak(text, severity, force) {
+    if (!STATE.voiceEnabled || !this.supported() || STATE.muted) return;
+    if (!force && this._rank[severity || 'warn'] < this._rank[STATE.voiceMinLevel || 'danger']) return;
+    // 队列最多压 2 条，避免刷屏式告警时语音严重滞后；极端级别可抢占
+    if (this._queue.length >= 2 || this._speaking && this._queue.length >= 1) {
+      if (severity === 'extreme') { this.cancel(); }
+      else return;
+    }
+    this._queue.push(text);
+    this._pump();
+  },
+  _pump() {
+    if (this._speaking || !this._queue.length) return;
+    const text = this._queue.shift();
+    const self = this;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      if (this._pick) u.voice = this._pick;
+      u.lang = (this._pick && this._pick.lang) || 'zh-CN';
+      u.rate = Math.min(2, Math.max(0.5, STATE.voiceRate || 1.15));
+      u.pitch = 1;
+      u.volume = 1;
+      u.onend = function() { self._speaking = false; setTimeout(function() { self._pump(); }, 100); };
+      u.onerror = function() { self._speaking = false; setTimeout(function() { self._pump(); }, 300); };
+      this._speaking = true;
+      speechSynthesis.speak(u);
+      // 某些浏览器 onend 不触发，加个兜底定时器
+      const words = text.length;
+      setTimeout(function() {
+        if (self._speaking) { self._speaking = false; self._pump(); }
+      }, 1200 + words * 260);
+    } catch(e) {
+      this._speaking = false;
+    }
+  },
+  // 首次用户交互时解锁（部分浏览器要求手势后才能发声）
+  unlock() {
+    if (!this.supported() || this._unlocked) return;
+    this._unlocked = true;
+    try {
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      speechSynthesis.speak(u);
+    } catch(e) {}
   },
 };
 
@@ -659,11 +886,19 @@ function shouldDingTalkPush(severity) {
 
 // ==================== BINANCE API ====================
 const BinanceAPI = {
-  _queue: [], _active: 0, _maxConcurrency: 10, _gap: 4,
+  _queue: [], _active: 0, _maxConcurrency: 14, _gap: 2,
   _win: [],                 // 最近 60s 内的请求 {t, w}
-  _maxWeightPerMin: 1100,   // 每分钟权重预算（币安上限 2400/分钟，留一半余量）
+  _maxWeightPerMin: 1800,   // 每分钟权重预算（币安上限 2400/分钟，留 25% 余量）
+  _budgetFactor: 1,         // 命中 418/429 后临时降速（自适应）
   _blockedUntil: 0,         // 被限流(418/429)后的暂停截止时间
   _blockReason: '',
+  usedWeight() {
+    const now = Date.now();
+    let s = 0;
+    for (const x of this._win) if (now - x.t < 60000) s += x.w;
+    return s;
+  },
+  weightCap() { return Math.round(this._maxWeightPerMin * this._budgetFactor); },
   _weightOf(limit) {        // 币安 klines 权重规则
     if (limit == null) return 1;
     if (limit < 100) return 1;
@@ -676,9 +911,10 @@ const BinanceAPI = {
     const pend = this._queue.splice(0, this._queue.length);
     for (const t of pend) { try { t.reject(new Error(reason || 'cancelled')); } catch(e) {} }
   },
-  _fetch(url, weight) {
+  _fetch(url, weight, prio) {
     return new Promise((resolve, reject) => {
-      this._queue.push({ url:url, resolve:resolve, reject:reject, w: weight || 1 });
+      const task = { url:url, resolve:resolve, reject:reject, w: weight || 1 };
+      if (prio) this._queue.unshift(task); else this._queue.push(task);   // 优先：用户正在看的图表
       this._pump();
     });
   },
@@ -696,7 +932,7 @@ const BinanceAPI = {
       self._win = self._win.filter(function(x) { return nw - x.t < 60000; });
       let used = 0;
       for (let i = 0; i < self._win.length; i++) used += self._win[i].w;
-      if (used + self._queue[0].w > self._maxWeightPerMin) {   // 超出权重预算，等下一个窗口
+      if (used + self._queue[0].w > self.weightCap()) {       // 超出权重预算，等下一个窗口
         setTimeout(function() { self._pump(); }, 1200);
         return;
       }
@@ -707,10 +943,17 @@ const BinanceAPI = {
         .then(function(r) {
           if (r.status === 418 || r.status === 429) {       // 币安限流：按 Retry-After 暂停全部请求
             const ra = parseInt(r.headers.get('Retry-After') || '0', 10);
-            const wait = ra > 0 ? ra * 1000 : 60000;
+            // 5 分钟内反复被限流 → 暂停时间递增（60s → 96s → 154s … 上限 10 分钟）
+            self._blockStreak = (Date.now() - (self._lastBlockAt || 0) < 300000) ? (self._blockStreak || 0) + 1 : 1;
+            self._lastBlockAt = Date.now();
+            const baseWait = ra > 0 ? ra * 1000 : 60000;
+            const wait = Math.min(baseWait * Math.pow(1.6, Math.max(0, self._blockStreak - 1)), 600000);
             self._blockedUntil = Date.now() + wait;
             self._blockReason = 'HTTP ' + r.status;
-            console.warn('[rate] 币安限流 ' + r.status + '，暂停 ' + Math.round(wait/1000) + 's');
+            self._budgetFactor = 0.55;                       // 自适应降速，避免连环触发限流
+            clearTimeout(self._budgetTimer);
+            self._budgetTimer = setTimeout(function() { self._budgetFactor = 1; }, 90000);
+            console.warn('[rate] 币安限流 ' + r.status + '，暂停 ' + Math.round(wait/1000) + 's，并降速至 ' + self.weightCap() + ' 权重/分钟');
             throw new Error('HTTP ' + r.status + ' (限流)');
           }
           if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -724,9 +967,9 @@ const BinanceAPI = {
     }
   },
   getJSON(url, weight) { return this._fetch(url, weight || 1); },
-  getKlines(symbol, interval, limit) {
+  getKlines(symbol, interval, limit, prio) {
     const lim = limit || 2;
-    return this._fetch(CONFIG.REST + '/klines?symbol=' + symbol + '&interval=' + interval + '&limit=' + lim, this._weightOf(lim))
+    return this._fetch(CONFIG.REST + '/klines?symbol=' + symbol + '&interval=' + interval + '&limit=' + lim, this._weightOf(lim), prio)
       .then(function(data) {
         return data.map(function(d) {
           return {
@@ -796,6 +1039,7 @@ class GainBoard {
     this._refreshing = false;
     this._lastSoundAt = 0;    // 声音节流
     this._lastNotifyAt = 0;   // 通知节流
+    this._lastVoiceAt = 0;    // 语音播报节流
   }
 
   // ───────── INIT ─────────
@@ -806,13 +1050,26 @@ class GainBoard {
     this.updateLevelUI();
     this.updateToolbarUI();
     this.updateMuteUI();
+    VoiceManager.init();
+    this.updateVoiceUI();
     this.buildTableHeader();
     this.updateAlertBadge();
     this.renderAlertPanel();
     this.bindChartEvents();
     const macdBtn = document.getElementById('macdBtn');
     if (macdBtn) macdBtn.classList.toggle('active', STATE.chartMacd);
-    this.toggleChart(window.innerWidth > 1100);   // 宽屏默认展开图表，窄屏默认收起
+    this.toggleChart(STATE.chartFull ? true : window.innerWidth > 1100);   // 宽屏默认展开图表，窄屏默认收起
+    if (STATE.chartFull) this.toggleChartFull(true, true);                  // 恢复上次的铺满模式（静默）
+    else this.fitChartZoom();
+    const tmc = document.getElementById('tileMacd');
+    if (tmc) tmc.checked = STATE.tileMacd;
+    document.querySelectorAll('#tileBar .btn[data-tiles]').forEach(function(b) {
+      b.classList.toggle('active', parseInt(b.dataset.tiles, 10) === STATE.tileCount);
+    });
+    document.querySelectorAll('#tileBar .btn[data-col]').forEach(function(b) {
+      b.classList.toggle('active', parseInt(b.dataset.col, 10) === STATE.tileCols);
+    });
+    if (localStorage.getItem('gain_board_tile_mode') === '1') this.toggleTile(true);
     this.updateChartHeader();
 
     if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
@@ -842,17 +1099,20 @@ class GainBoard {
   }
 
   startLoops() {
+    this._pb = bucketStartOf(Date.now(), STATE.level);      // 用于检测换K线
+    this._pricePolling = false;
     setInterval(() => this.repaint(), 500);                 // 单元格刷新
-    setInterval(() => { this.orderRows(); this.applyFilters(); }, 1500);  // 榜内排序
+    setInterval(() => { if (this.tableVisible()) { this.orderRows(); this.applyFilters(); } }, 1500);  // 榜内排序
     setInterval(() => this.refreshBoard(false), 5000);      // 榜单成员重算（前200）
     setInterval(() => this.updateStats(), 2000);
-    setInterval(() => this.refreshTicker(), 60000);         // 24h 涨跌/成交额
+    setInterval(() => this.refreshTicker(), 120000);        // 24h 涨跌/成交额(权重40)
     setInterval(() => this.processRestFixQueue(), 4000);
     setInterval(() => this.dataWatchdog(), 3000);           // WS 静默检测
     setInterval(() => this.pollChart(), 4000);              // 图表实时刷新（WS 静默时用）
-    setInterval(() => { if (!STATE.prefill.active) this.scanMacdAll(); }, 600000);  // MACD 全池校正
-    setInterval(() => this.pollRest(), 20000);              // WS 静默时的 REST 轮询
-    setInterval(() => { if (STATE.restMode && !STATE.prefill.active) this.prefillAll(false); }, 120000); // 全池重扫(仅涨幅)
+    setInterval(() => { if (!STATE.prefill.active && STATE.macdFilter !== 'all') this.scanMacdAll(); }, 900000);  // MACD 全池校正(仅筛选时)
+    setInterval(() => this.pollPrices(), 4000);             // 全市场报价(权重2)：一次刷新所有币的现价/涨幅
+    setInterval(() => this.pollRest(), 180000);             // 兜底：缓慢校正榜单内的K线
+    setInterval(() => { if (STATE.restMode && !STATE.prefill.active) this.prefillAll(false); }, 240000); // 全池重扫(仅涨幅)
   }
 
   // WS 长时间没有 K 线推送 → 自动切换到 REST 轮询，保证榜单持续跳动
@@ -869,6 +1129,60 @@ class GainBoard {
     if (wsEl) {
       wsEl.textContent = STATE.wsStreams + '流 · ' + (STATE.restMode ? 'REST轮询' : '实时');
       wsEl.style.color = STATE.restMode ? 'var(--yellow)' : 'var(--green)';
+    }
+  }
+
+  // REST 模式：一次全市场报价（权重 2）刷新所有币的现价 → 涨幅，成本极低
+  async pollPrices() {
+    if (!STATE.restMode || this._pricePolling || STATE.prefill.active) return;
+    this._pricePolling = true;
+    try {
+      const arr = await BinanceAPI.getJSON(CONFIG.REST + '/ticker/price', 2);
+      if (!Array.isArray(arr)) return;
+      const map = new Map();
+      for (let i = 0; i < arr.length; i++) map.set(arr[i].symbol, parseFloat(arr[i].price));
+      const curStart = bucketStartOf(Date.now(), STATE.level);
+      // 新的一根K线开始 → 全池拉一次K线，校正开盘/最高/最低与上根涨幅
+      if (this._pb !== curStart) {
+        this._pb = curStart;
+        const self = this;
+        clearTimeout(this._rolloverTimer);
+        this._rolloverTimer = setTimeout(function() {
+          if (STATE.restMode && !STATE.prefill.active) self.prefillAll(false);
+        }, 3000);
+      }
+      for (const sym of STATE.universe) {
+        const px = map.get(sym);
+        if (!(px > 0)) continue;
+        const m = STATE.meta[sym];
+        if (m) m.lastPrice = px;
+        let b = STATE.buckets[sym];
+        if (!b || !(b.open > 0)) continue;
+        if (b.start < curStart) {
+          // 换K线：先用边界时刻的价格近似新K开盘（精确值由随后的K线扫描校正）
+          const lastPx = b.close > 0 ? b.close : px;
+          const prev = { start: b.start, open: b.open, close: lastPx, gain: b.open > 0 ? (lastPx - b.open) / b.open * 100 : null };
+          b = {
+            start: curStart, open: lastPx, high: Math.max(lastPx, px), low: Math.min(lastPx, px),
+            close: px, gain: 0, amp: 0, valid: false, lastUpdate: Date.now(), src: 'approx', prev: prev,
+          };
+          STATE.buckets[sym] = b;
+        } else if (b.start === curStart) {
+          b.close = px;
+          if (px > b.high) b.high = px;
+          if (px < b.low) b.low = px;
+          b.lastUpdate = Date.now();
+        } else {
+          continue;
+        }
+        b.gain = (b.close - b.open) / b.open * 100;
+        b.amp = (b.high - b.low) / b.open * 100;
+        this.macdTick(sym, b.start, px);
+        this.checkAlert(sym, b.gain);
+      }
+    } catch(e) {
+    } finally {
+      this._pricePolling = false;
     }
   }
 
@@ -950,6 +1264,9 @@ class GainBoard {
       }));
       localStorage.setItem('amp_monitor_sound', STATE.soundEnabled);
       localStorage.setItem('amp_monitor_notify', STATE.notifyEnabled);
+      localStorage.setItem('gain_board_voice', STATE.voiceEnabled ? '1' : '0');
+      localStorage.setItem('gain_board_voice_level', STATE.voiceMinLevel);
+      localStorage.setItem('gain_board_voice_rate', String(STATE.voiceRate));
       localStorage.setItem('amp_monitor_muted', STATE.muted);
       localStorage.setItem('amp_monitor_dingtalk_enabled', STATE.dingtalkEnabled);
       localStorage.setItem('amp_monitor_dingtalk_webhook', STATE.dingtalkWebhook);
@@ -959,6 +1276,43 @@ class GainBoard {
   }
 
   // ───────── UNIVERSE ─────────
+  // 改成交额门槛：用已缓存的 volMap 重算候选池（零请求），随后重启行情管道
+  setMinVol(v) {
+    if (!(v > 0)) return;
+    STATE.minVol = v;
+    try { localStorage.setItem('gain_board_min_vol', String(v)); } catch(e) {}
+    const mv = document.getElementById('minVolSelect');
+    if (mv) mv.value = String(v);
+    if (!STATE.volMap || !Object.keys(STATE.volMap).length) { this.manualRefresh(); return; }
+    const all = Object.keys(STATE.volMap).length;
+    const list = [];
+    for (const sym in STATE.volMap) if (STATE.volMap[sym] >= v) list.push(sym);
+    list.sort((a, b) => STATE.volMap[b] - STATE.volMap[a]);
+    STATE.universe = list.slice(0, CONFIG.UNIVERSE_CAP);
+    STATE.universeSet = new Set(STATE.universe);
+    for (const sym of Object.keys(STATE.buckets)) if (!STATE.universeSet.has(sym)) delete STATE.buckets[sym];
+    for (const sym of Object.keys(STATE.macdState)) if (!STATE.universeSet.has(sym)) delete STATE.macdState[sym];
+    document.getElementById('pairCount').textContent = '币种: ' + STATE.universe.length;
+    document.getElementById('statUniverse').textContent = STATE.universe.length;
+    // 重启行情管道（不重新拉币种列表）
+    this.disconnectWS();
+    STATE.epoch++;
+    BinanceAPI.clearQueue('universe changed');
+    STATE.priorSymbols = STATE.displayed.slice(0, 240);
+    this.rowRefs = {};
+    this.cellRefs = {};
+    this.bodyEl.innerHTML = '';
+    STATE.displayed = [];
+    STATE.tileSyms = [];
+    STATE.tileHist = {};
+    STATE.prefillMacd = { active: false, done: 0, total: 0 };
+    STATE.macdPending = {};
+    this.startWebSocket();
+    this.refreshBoard(true);
+    this.prefillAll(true);
+    showToast('成交额门槛 ≥ ' + fmtVol(v) + ' USDT：候选池 ' + STATE.universe.length + '/' + all + ' 个币（请求量随之下调）');
+  }
+
   async loadUniverse() {
     if (STATE.loadingUniverse) return;
     STATE.loadingUniverse = true;
@@ -972,7 +1326,7 @@ class GainBoard {
           .map(s => s.symbol);
       } catch(e) { console.warn('[universe] exchangeInfo failed, fallback to ticker', e); }
 
-      const tickers = await BinanceAPI.getJSON(CONFIG.REST + '/ticker/24hr');
+      const tickers = await BinanceAPI.getJSON(CONFIG.REST + '/ticker/24hr', 40);   // 全市场 24h 行情权重 40
       const tmap = {};
       for (const t of tickers) tmap[t.symbol] = t;
 
@@ -983,6 +1337,7 @@ class GainBoard {
 
       const list = [];
       const meta = {};
+      const volMap = {};                       // 全部永续合约的成交额，供"门槛"切换时免请求重算
       for (const sym of perpSyms) {
         const t = tmap[sym];
         if (!t || isStable(sym)) continue;
@@ -990,11 +1345,13 @@ class GainBoard {
         const chg = parseFloat(t.priceChangePercent) || 0;
         const price = parseFloat(t.lastPrice) || 0;
         meta[sym] = { lastPrice:price, priceChangePercent:chg, quoteVolume:vol };
-        if (vol >= CONFIG.MIN_QUOTE_VOL) list.push(sym);
+        volMap[sym] = vol;
+        if (vol >= STATE.minVol) list.push(sym);
       }
       list.sort((a,b) => meta[b].quoteVolume - meta[a].quoteVolume);
 
       STATE.meta = meta;
+      STATE.volMap = volMap;
       STATE.universe = list.slice(0, CONFIG.UNIVERSE_CAP);
       STATE.universeSet = new Set(STATE.universe);
 
@@ -1015,7 +1372,7 @@ class GainBoard {
 
   async refreshTicker() {
     try {
-      const tickers = await BinanceAPI.getJSON(CONFIG.REST + '/ticker/24hr');
+      const tickers = await BinanceAPI.getJSON(CONFIG.REST + '/ticker/24hr', 40);   // 全市场 24h 行情权重 40
       for (const t of tickers) {
         const m = STATE.meta[t.symbol];
         if (!m) continue;
@@ -1158,42 +1515,121 @@ class GainBoard {
     const token = ++STATE.scanToken;
     const epoch = STATE.epoch;
     const info = levelInfo();
-    // 带 MACD 时一次请求同时供“当前K线涨幅”和“MACD 历史”使用，不额外增加请求数
-    // 不带 MACD 时也要取到上一根完整的K线（用于“上根收盘涨幅”）
-    const limit = withMacd ? this.macdHistoryLimit(info) : Math.max(3, info.group * 2 + 1);
-    const list = STATE.universe.slice();
-    STATE.prefill = { active: true, done: 0, total: list.length, macd: !!withMacd };
-    let idx = 0;
-    let done = 0;
     const self = this;
-    const alive = function() { return token === STATE.scanToken && epoch === STATE.epoch; };
-    const worker = async function() {
-      while (idx < list.length) {
-        if (!alive()) return;
-        const sym = list[idx++];
-        try {
-          const candles = await BinanceAPI.getKlines(sym, info.base, limit);
-          if (!alive()) return;
-          self.applyRestCandles(sym, candles, info, STATE.restMode);
-          if (withMacd) self.applyMacdHistory(sym, candles, info);
-        } catch(e) {
-          self.queueRestFix(sym);        // 失败(多为限流暂停)的币稍后自动补一次
-        }
-        done++;
-        STATE.prefill.done = Math.min(done, list.length);
-      }
-    };
-    const workers = [];
-    for (let i = 0; i < 12; i++) workers.push(worker());
-    await Promise.all(workers);
-    if (!alive()) return;
+    // ── 阶段1：只取"当前K线"（limit 很小 → 权重 1），用最快的速度把榜单刷出来 ──
+    const gainLimit = Math.max(3, info.group * 2 + 1);      // 顺带取到上一根，用于"上根涨幅"
+    const order = this.prefillOrder();
+    STATE.prefill = { active: true, done: 0, total: order.length, macd: false };
+    await this.runPrefillPhase(order, gainLimit, function(sym, candles) {
+      self.applyRestCandles(sym, candles, info, STATE.restMode);
+    }, epoch);
+    if (token !== STATE.scanToken || epoch !== STATE.epoch) return;
     STATE.prefill.active = false;
     this.refreshBoard(true);
     this.setStatus('✓ 就绪', 'var(--green)');
     if (!STATE.armedOnce) {
       STATE.armedOnce = true;
-      setTimeout(() => { STATE.alertsArmed = true; }, 3000);   // 首次全池校准完成后再开启告警，避免刷屏
+      setTimeout(() => { STATE.alertsArmed = true; }, 3000);   // 首次校准完成后再开启告警，避免刷屏
     }
+    // ── 阶段2：MACD 历史（只补榜单里显示的币，后台进行，不挡界面）──
+    if (withMacd) this.prefillMacd();
+  }
+
+  // 加载顺序：榜单里已有的币先刷（切级别时它们大概率还在榜内），其余按成交额
+  prefillOrder() {
+    // 榜单现有的币 + 切换前的榜单（大概率还在榜内）优先刷，其余按成交额
+    const first = [];
+    const seen = new Set();
+    const push = function(s) { if (s && !seen.has(s)) { seen.add(s); first.push(s); } };
+    STATE.displayed.forEach(push);
+    (STATE.priorSymbols || []).forEach(push);
+    const rest = STATE.universe.filter(function(s) { return !seen.has(s); });
+    return first.concat(rest);
+  }
+
+  async runPrefillPhase(list, limit, onEach, epoch) {
+    let idx = 0, done = 0;
+    const total = list.length;
+    const self = this;
+    const alive = function() { return epoch === STATE.epoch; };
+    const worker = async function() {
+      while (idx < total) {
+        if (!alive()) return;
+        const sym = list[idx++];
+        try {
+          const candles = await BinanceAPI.getKlines(sym, levelInfo().base, limit);
+          if (!alive()) return;
+          onEach(sym, candles);
+        } catch(e) {
+          self.queueRestFix(sym);      // 失败(多为限流暂停)的币稍后补一次
+        }
+        done++;
+        STATE.prefill.done = Math.min(done, total);
+      }
+    };
+    const workers = [];
+    for (let i = 0; i < 12; i++) workers.push(worker());
+    await Promise.all(workers);
+  }
+
+  // 阶段2：只为榜单显示中的币补 MACD 历史（不再让全池 495 个币的 MACD 拖慢首屏）
+  async prefillMacd() {
+    if (STATE.prefillMacd.active) return;
+    const epoch = STATE.epoch;
+    const info = levelInfo();
+    const limit = this.macdHistoryLimit(info);
+    const list = (STATE.displayed.length ? STATE.displayed : STATE.universe.slice(0, 120)).slice();
+    if (!list.length) return;
+    STATE.prefillMacd = { active: true, done: 0, total: list.length };
+    let idx = 0, done = 0;
+    const self = this;
+    const alive = function() { return epoch === STATE.epoch; };
+    const worker = async function() {
+      while (idx < list.length) {
+        if (!alive()) return;
+        const sym = list[idx++];
+        if (STATE.macdState[sym] && STATE.macdState[sym].ready) { done++; STATE.prefillMacd.done = done; continue; }
+        try {
+          const candles = await BinanceAPI.getKlines(sym, info.base, limit);
+          if (!alive()) return;
+          self.applyMacdHistory(sym, candles, info);
+        } catch(e) {}
+        done++;
+        STATE.prefillMacd.done = Math.min(done, list.length);
+      }
+    };
+    const workers = [];
+    for (let i = 0; i < 10; i++) workers.push(worker());
+    try {
+      await Promise.all(workers);
+    } finally {
+      STATE.prefillMacd.active = false;          // 被打断也要清标记，否则会挡住下一轮
+      if (alive()) this.refreshBoard(false);
+    }
+  }
+
+  // 榜内新冒出来的币缺 MACD → 小批量补取（每次最多 12 个，跟着刷新节奏走）
+  maybeFetchMacd() {
+    if (STATE.macdFilter !== 'all') return;      // 筛选模式由全池扫描负责
+    const info = levelInfo();
+    const todo = [];
+    for (const sym of STATE.displayed) {
+      if (!STATE.macdState[sym] || !STATE.macdState[sym].ready) {
+        if (!STATE.macdPending[sym]) { STATE.macdPending[sym] = true; todo.push(sym); }
+      }
+      if (todo.length >= 12) break;
+    }
+    if (!todo.length) return;
+    const limit = this.macdHistoryLimit(info);
+    const self = this;
+    const epoch = STATE.epoch;
+    todo.forEach(function(sym) {
+      BinanceAPI.getKlines(sym, info.base, limit, true).then(function(candles) {
+        delete STATE.macdPending[sym];
+        if (epoch !== STATE.epoch) return;
+        self.applyMacdHistory(sym, candles, info);
+      }).catch(function() { delete STATE.macdPending[sym]; });
+    });
   }
 
   // ───────── 榜单 ─────────
@@ -1239,9 +1675,26 @@ class GainBoard {
     if (force || !sameSet) {
       this.syncRows(newList, !force);
     }
-    this.orderRows();
-    this.applyFilters();
+    if (this.tableVisible()) {
+      this.orderRows();
+      this.applyFilters();
+    }
     this.updateStats();
+
+    // 榜内新冒出来的币补 MACD（小批量）
+    this.maybeFetchMacd();
+
+    // 平铺模式：跟随榜单换图块（只换掉跌出 1.5N 的）
+    if (STATE.tileMode) this.syncTiles(false);
+
+    // 单图铺满模式下列表框跟随榜单变化（仅数量/榜首变化时重建，避免打断用户操作）
+    if (STATE.chartFull) {
+      const sel = document.getElementById('chartPickSelect');
+      if (sel) {
+        const sig = newList.length + ':' + (newList[0] || '');
+        if (sel._sig !== sig) { sel._sig = sig; this.fillChartPicker(); }
+      }
+    }
 
     // 图表默认跟随榜一（仅在没有手动选币时）
     if (STATE.chartPanelOpen && !STATE.chartSymbol && newList.length) {
@@ -1376,7 +1829,8 @@ class GainBoard {
       STATE.chartCandles = this.aggregateLevel(STATE.chartBase, STATE.level);
       STATE.chartDirty = false;
     }
-    for (const sym of STATE.displayed) {
+    // 全铺模式下表格是隐藏的，跳过 200 行的单元格刷新（省下大量 DOM 写入）
+    for (const sym of (this.tableVisible() ? STATE.displayed : [])) {
       const refs = this.cellRefs[sym];
       if (!refs) continue;
       const b = STATE.buckets[sym];
@@ -1479,6 +1933,8 @@ class GainBoard {
       this.updateChartHeader();
       this.updateChartMeta();
     }
+    // 平铺模式：刷新所有小图
+    if (STATE.tileMode) this.renderTiles();
   }
 
   setText(el, key, text) {
@@ -1558,6 +2014,12 @@ class GainBoard {
       else SoundManager.down();
     }
 
+    // 语音播报（同一处节流，避免和提示音抢节奏）
+    if (t - this._lastVoiceAt > 800) {
+      this._lastVoiceAt = t;
+      VoiceManager.speak(this.voiceText(sym, gain, severity, dir), severity);
+    }
+
     if ((severity === 'extreme' || severity === 'danger') && t - this._lastNotifyAt > 3000) {
       this._lastNotifyAt = t;
       sendBrowserNotification(
@@ -1586,6 +2048,51 @@ class GainBoard {
 
     this.updateStats();
     this.saveState();
+  }
+
+  // 组织一句适合中文 TTS 朗读的播报文本
+  voiceText(sym, gain, severity, dir) {
+    const coin = sym.replace('USDT', '');
+    const lv = levelInfo().label;
+    const sev = severity === 'extreme' ? '极端' : (severity === 'danger' ? '高危' : '');
+    const abs = Math.abs(gain);
+    const num = abs >= 10 ? abs.toFixed(1) : abs.toFixed(2);
+    return coin + '，' + lv + '，' + sev + dir + '，百分之' + num;
+  }
+
+  testVoice() {
+    if (!VoiceManager.supported()) { showToast('❌ 当前浏览器不支持语音合成 (Web Speech API)', true); return; }
+    const sample = '语音播报测试，' + (STATE.chartSymbol ? STATE.chartSymbol.replace('USDT','') : 'BTC') +
+      '，' + levelInfo().label + '，高危拉升，百分之2.35';
+    VoiceManager.cancel();
+    VoiceManager.speak(sample, 'warn', true);   // 试听不受最低级别限制
+    const hint = document.getElementById('voiceHint');
+    if (hint) hint.textContent = '当前音色：' + VoiceManager.voiceName() + '　语速 ' + STATE.voiceRate;
+  }
+
+  toggleVoice() {
+    if (!VoiceManager.supported()) { showToast('❌ 当前浏览器不支持语音播报', true); return; }
+    STATE.voiceEnabled = !STATE.voiceEnabled;
+    VoiceManager.unlock();
+    if (!STATE.voiceEnabled) VoiceManager.cancel();
+    this.updateVoiceUI();
+    this.saveState();
+    showToast(STATE.voiceEnabled ? ('🗣️ 语音播报已开启（' + stateVoiceMinLabel() + '，' + VoiceManager.voiceName() + '）') : '🔇 语音播报已关闭');
+    if (STATE.voiceEnabled) {
+      VoiceManager.speak('语音播报已开启，' + stateVoiceMinLabel(), 'warn', true);
+    }
+  }
+
+  updateVoiceUI() {
+    const btn = document.getElementById('voiceBtn');
+    if (!btn) return;
+    btn.classList.toggle('active', STATE.voiceEnabled);
+    btn.textContent = STATE.voiceEnabled ? '🗣️' : '🤐';
+    btn.title = STATE.voiceEnabled
+      ? ('语音播报：已开启（' + stateVoiceMinLabel() + '）· 点击关闭')
+      : '语音播报：已关闭 · 点击开启';
+    const el = document.getElementById('voiceEnabled');
+    if (el) el.checked = STATE.voiceEnabled;
   }
 
   flashRow(sym) {
@@ -1626,8 +2133,13 @@ class GainBoard {
     BinanceAPI.clearQueue('level switched');   // 作废上一级别还没发出的请求，避免白白消耗限流预算
     STATE.buckets = {};
     STATE.macdState = {};                      // MACD 是按级别算的，换级别要重扫
+    STATE.tileHist = {};                       // 平铺小图的历史也按级别算
+    STATE.tilePending = {};
+    STATE.prefillMacd = { active: false, done: 0, total: 0 };
+    STATE.macdPending = {};
     STATE.alertCooldown = {};
     STATE.restFixQueue.clear();
+    STATE.priorSymbols = STATE.displayed.slice(0, 240);   // 记住旧榜单，下轮优先刷
     this.rowRefs = {};
     this.cellRefs = {};
     this.bodyEl.innerHTML = '';
@@ -1635,7 +2147,9 @@ class GainBoard {
     this.updateLevelUI();
     this.buildTableHeader();
     this.startWebSocket();
-    this.prefillAll(true);
+    clearTimeout(this._prefillTimer);
+    const selfLv = this;
+    this._prefillTimer = setTimeout(function() { selfLv.prefillAll(true); }, 350);   // 连点级别时只加载最后一次，省请求
     this.refreshBoard(true);
     if (STATE.chartSymbol) {                 // 级别变了，图表按新级别重取
       STATE.chartBase = [];
@@ -1644,6 +2158,7 @@ class GainBoard {
       this.fetchChartHistory(STATE.chartSymbol);
     }
     this.updateChartHeader();
+    if (STATE.tileMode) { this.syncTiles(true); this.tileLayout(); this.renderTiles(); }
     this.saveState();
   }
 
@@ -1709,6 +2224,8 @@ class GainBoard {
     });
     const sel = document.getElementById('thresholdPreset');
     if (sel) sel.value = STATE.thresholdPreset;
+    const mv = document.getElementById('minVolSelect');
+    if (mv) mv.value = String(STATE.minVol);
     const fe = document.getElementById('filterExtreme');
     if (fe) fe.checked = !!STATE.filters.extreme;
     const fa = document.getElementById('filterAlerted');
@@ -1735,24 +2252,453 @@ class GainBoard {
   }
 
   // ───────── 右侧K线图 ─────────
+  tableVisible() { return !STATE.chartFull && !STATE.tileMode; }
+
   toggleChart(force) {
     const panel = document.getElementById('chartPanel');
     if (!panel) return;
     const show = (typeof force === 'boolean') ? force : panel.classList.contains('hidden');
+    if (!show && STATE.chartFull) this.toggleChartFull(false, true);   // 全铺时收起图表 → 先回到分栏，避免白屏
     panel.classList.toggle('hidden', !show);
     STATE.chartPanelOpen = show;
     const btn = document.getElementById('chartToggleBtn');
     if (btn) btn.classList.toggle('active', show);
     if (show) {
       if (!STATE.chartSymbol && STATE.displayed.length) { this.selectSymbol(STATE.displayed[0]); return; }
+      if (STATE.chartFull) this.fillChartPicker();
       this.updateChartHeader();
       this.renderChart();
       this.updateChartMeta();
     }
   }
 
+  // 全铺模式：K线图占满整个内容区（表格收起），/ 或按 F 键切换
+  toggleChartFull(force, silent) {
+    const on = (typeof force === 'boolean') ? force : !STATE.chartFull;
+    if (on && STATE.tileMode) this.toggleTile(false);   // 两种铺法互斥
+    STATE.chartFull = on;
+    document.body.classList.toggle('chart-full', on);
+    const btn = document.getElementById('chartFullBtn');
+    if (btn) {
+      btn.classList.toggle('active', on);
+      btn.textContent = on ? '◧ 分栏' : '⛶ 全铺';
+      btn.title = on ? '回到左右分栏（表格 + 右侧图表）' : 'K线图全铺显示（表格收起，F 键切换）';
+    }
+    const inner = document.getElementById('chartFullInnerBtn');
+    if (inner) inner.classList.toggle('active', on);
+    if (on) {
+      if (!STATE.chartPanelOpen) this.toggleChart(true);
+      this.fillChartPicker();
+      if (!STATE.chartSymbol && STATE.displayed.length) this.selectSymbol(STATE.displayed[0]);
+    } else if (this.tableVisible()) {
+      // 回到分栏：把隐藏期间没刷的表格补刷一遍
+      this.orderRows();
+      this.applyFilters();
+      this.repaint();
+    }
+    const self = this;
+    setTimeout(function() {
+      self.fitChartZoom();
+      self.ensureChartHistory();
+      self.renderChart();
+      self.updateChartHeader();
+      self.updateChartMeta();
+    }, 60);
+    try { localStorage.setItem('gain_board_chart_full', on ? '1' : '0'); } catch(e) {}
+    if (!silent) {
+      showToast(on ? '⛶ 全铺模式：K线图占满整屏（表格已收起，按 F 或点「◧ 分栏」恢复）'
+                   : '◧ 已恢复左右分栏（表格 + 右侧图表）');
+    }
+  }
+
+  // 按当前画布宽度自动定可见K线根数（约每根 8px），全铺/分栏切换后调用
+  fitChartZoom() {
+    const wrap = document.getElementById('chartCanvasWrap');
+    if (!wrap) return;
+    const w = wrap.clientWidth;
+    if (!w) return;
+    const plotW = Math.max(120, w - 64);      // 减去右侧价格轴
+    STATE.chartVisible = Math.max(30, Math.min(180, Math.round(plotW / 8)));
+  }
+
+  // 全铺模式下用下拉框/前后按钮在榜单内切币（表格已收起）
+  fillChartPicker() {
+    const sel = document.getElementById('chartPickSelect');
+    if (!sel) return;
+    const list = STATE.displayed.length ? STATE.displayed : STATE.universe.slice(0, 60);
+    let html = '';
+    let found = false;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] === STATE.chartSymbol) found = true;
+      html += '<option value="' + list[i] + '">#' + (i + 1) + ' ' + list[i].replace('USDT','') + '</option>';
+    }
+    if (!found && STATE.chartSymbol) {
+      html = '<option value="' + STATE.chartSymbol + '">' + STATE.chartSymbol.replace('USDT','') + '（榜外）</option>' + html;
+    }
+    sel.innerHTML = html;
+    if (STATE.chartSymbol) sel.value = STATE.chartSymbol;
+  }
+
+  // 全铺变宽后可见根数变大，历史不够就补取一次
+  ensureChartHistory() {
+    if (!STATE.chartSymbol || STATE.chartLoading) return;
+    if (Date.now() - (this._lastEnsure || 0) < 8000) return;   // 8 秒内只补一次
+    if (STATE.chartCandles.length < STATE.chartVisible + 10) {
+      this._lastEnsure = Date.now();
+      this.fetchChartHistory(STATE.chartSymbol);
+    }
+  }
+
+  pickChartSymbol(sym) {
+    if (sym) this.selectSymbol(sym);
+    const sel = document.getElementById('chartPickSelect');
+    if (sel) sel.value = sym;
+  }
+
+  stepChart(dir) {
+    const list = STATE.displayed.length ? STATE.displayed : STATE.universe;
+    if (!list.length) return;
+    let i = list.indexOf(STATE.chartSymbol);
+    if (i < 0) i = 0;
+    i = (i + dir + list.length) % list.length;
+    this.selectSymbol(list[i]);
+    const sel = document.getElementById('chartPickSelect');
+    if (sel) sel.value = list[i];
+  }
+
   selectTopChart() {
     if (STATE.displayed.length) this.selectSymbol(STATE.displayed[0]);
+  }
+
+  // ───────── 平铺模式：多张K线图网格 ─────────
+  toggleTile(force) {
+    const on = (typeof force === 'boolean') ? force : !STATE.tileMode;
+    STATE.tileMode = on;
+    document.body.classList.toggle('tile-mode', on);
+    const btn = document.getElementById('tileBtn');
+    if (btn) {
+      btn.classList.toggle('active', on);
+      btn.textContent = on ? '◧ 分栏' : '🔲 平铺';
+      btn.title = on ? '回到分栏（表格 + 单张图）' : '多张K线图网格平铺，同时看多个币（T 键）';
+    }
+    if (on) {
+      if (STATE.chartFull) this.toggleChartFull(false, true);   // 两种铺法互斥
+      this.syncTiles(true);
+      const self = this;
+      setTimeout(function() { self.tileLayout(); self.renderTiles(); }, 60);
+      showToast('🔲 平铺模式：' + STATE.tileCount + ' 张K线图同时盯盘（点图块可放大单图，T 键返回）');
+    } else {
+      const self2 = this;
+      setTimeout(function() { self2.renderChart(); self2.repaint(); }, 60);
+      showToast('◧ 已恢复分栏（表格 + 单张图）');
+    }
+    try { localStorage.setItem('gain_board_tile_mode', on ? '1' : '0'); } catch(e) {}
+  }
+
+  setTileCount(n) {
+    STATE.tileCount = n;
+    document.querySelectorAll('#tileBar .btn[data-tiles]').forEach(function(b) {
+      b.classList.toggle('active', parseInt(b.dataset.tiles, 10) === n);
+    });
+    this.syncTiles(true);
+    this.tileLayout();
+    this.renderTiles();
+    try { localStorage.setItem('gain_board_tile_count', String(n)); } catch(e) {}
+  }
+
+  setTileCols(n) {
+    STATE.tileCols = n;
+    document.querySelectorAll('#tileBar .btn[data-col]').forEach(function(b) {
+      b.classList.toggle('active', parseInt(b.dataset.col, 10) === n);
+    });
+    this.tileLayout();
+    this.renderTiles();
+    try { localStorage.setItem('gain_board_tile_cols', String(n)); } catch(e) {}
+  }
+
+  toggleTileMacd() {
+    STATE.tileMacd = !STATE.tileMacd;
+    const cb = document.getElementById('tileMacd');
+    if (cb) cb.checked = STATE.tileMacd;
+    try { localStorage.setItem('gain_board_tile_macd', STATE.tileMacd ? '1' : '0'); } catch(e) {}
+    this.renderTiles();
+  }
+
+  // 固定一行 4 个：一屏放得下就均分高度，放不下就固定行高 + 上下滚动
+  tileLayout() {
+    const grid = document.getElementById('tileGrid');
+    if (!grid) return;
+    const n = Math.max(1, STATE.tileCount);
+    const w = grid.clientWidth, h = grid.clientHeight;
+    if (!w || !h) return;
+    const gap = 6;
+    const pad = 12;                                     // #tileGrid 的上下/左右 padding
+    // 列数可调（默认 4 列；选 3 列则每张图更宽）
+    const wantCols = STATE.tileCols || 4;
+    const maxCols = Math.max(1, Math.min(wantCols, Math.floor(w / 200)));
+    const cols = Math.max(1, Math.min(n, maxCols));
+    const rows = Math.ceil(n / cols);
+    const availH = h - pad;
+    const natural = (availH - gap * (rows - 1)) / rows;  // 均分到一屏时每格高度（已扣 padding 与行间距）
+    const MINH = 260, MAXH = 520;
+    let cellH = Math.min(natural, MAXH);
+    let scroll = false;
+    if (natural < MINH) { cellH = 300; scroll = true; }   // 太矮就固定 300px 行高 + 可下拉（图更大更清楚）
+    cellH = Math.max(60, Math.floor(cellH) - 1);          // -1px 防止亚像素误差把最后一行挤出视口
+    grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+    grid.style.gridTemplateRows = 'repeat(' + rows + ', ' + Math.round(cellH) + 'px)';
+    grid.style.overflowY = scroll ? 'auto' : 'hidden';
+    grid.dataset.mode = scroll ? 'scroll' : 'fit';
+    grid.dataset.cols = String(cols);
+  }
+
+  // 只重绘视口内的图块（50 张时省掉大量无用的 canvas 绘制）
+  _ensureTileObserver() {
+    if (this._tileObs || !window.IntersectionObserver) return;
+    const grid = document.getElementById('tileGrid');
+    this._tileObs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(en) { en.target._visible = en.isIntersecting; });
+    }, { root: grid, rootMargin: '200px 0px' });
+  }
+
+  // 平铺哪些币：跟随榜单前 N，但只替换"跌出 1.5N 名"的图块，避免整屏乱跳
+  syncTiles(force) {
+    const grid = document.getElementById('tileGrid');
+    if (!grid) return;
+    const n = Math.max(1, STATE.tileCount);
+    const board = STATE.displayed;
+    if (!board.length) return;
+    const keepSet = new Set(board.slice(0, Math.min(board.length, Math.ceil(n * 1.5))));
+    let cur = (STATE.tileSyms || []).slice(0, n).filter(function(s) { return keepSet.has(s); });
+    const used = new Set(cur);
+    for (const s of board) {
+      if (cur.length >= n) break;
+      if (!used.has(s)) { cur.push(s); used.add(s); }
+    }
+    if (cur.length < n) {                       // 榜单不足时用候选池补齐
+      for (const s of STATE.universe) {
+        if (cur.length >= n) break;
+        if (!used.has(s)) { cur.push(s); used.add(s); }
+      }
+    }
+    STATE.tileSyms = cur;
+
+    // DOM：按位置复用，改 dataset.sym
+    while (grid.children.length > cur.length) grid.removeChild(grid.lastChild);
+    while (grid.children.length < cur.length) {
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.innerHTML = '<div class="tile-head">' +
+        '<span class="tile-rank"></span>' +
+        '<span class="tile-sym"></span>' +
+        '<span class="tile-gain"></span></div>' +
+        '<canvas></canvas>';
+      tile.addEventListener('click', function() { app.tileClick(tile.dataset.sym); });
+      tile._visible = true;
+      this._ensureTileObserver();
+      if (this._tileObs) this._tileObs.observe(tile);
+      grid.appendChild(tile);
+    }
+    for (let i = 0; i < cur.length; i++) {
+      const tile = grid.children[i];
+      const sym = cur[i];
+      if (tile.dataset.sym !== sym || force) {
+        tile.dataset.sym = sym;
+        tile.querySelector('.tile-sym').textContent = sym.replace('USDT', '');
+        if (!STATE.tileHist[sym]) this.fetchTileHistory(sym);
+      }
+    }
+    this.tileLayout();      // 图块数量变化后重排行列
+  }
+
+  // 每张小图的历史（只要已收盘的K线；当前这根用实时桶拼上去）
+  async fetchTileHistory(sym) {
+    if (!sym || STATE.tilePending[sym]) return;
+    STATE.tilePending[sym] = true;
+    const info = levelInfo();
+    const limit = Math.min(400, (120 + 40) * info.group + info.group);   // 最多取 120 根，按图宽自适应显示
+    try {
+      const base = await BinanceAPI.getKlines(sym, info.base, limit, true);
+      const cand = this.aggregateLevel(base, STATE.level);
+      const curStart = bucketStartOf(Date.now(), STATE.level);
+      const done = cand.filter(function(c) { return c.time < curStart; }).slice(-STATE.tileBars);
+      STATE.tileHist[sym] = done;
+    } catch(e) {}
+    STATE.tilePending[sym] = false;
+  }
+
+  // 合成某张小图要画的K线：历史 + 实时正在走的那根
+  tileCandles(sym, bars) {
+    const keep = Math.max(30, Math.min(120, bars || STATE.tileBars));
+    const hist = (STATE.tileHist[sym] || []).slice(-keep);
+    const arr = hist.slice();
+    const live = STATE.buckets[sym];
+    if (live && live.start > 0 && isFinite(live.open) && live.open > 0) {
+      const c = { time: live.start, open: live.open, high: live.high, low: live.low, close: live.close, volume: 0 };
+      if (!arr.length || c.time > arr[arr.length - 1].time) arr.push(c);
+      else if (c.time === arr[arr.length - 1].time) arr[arr.length - 1] = c;
+    }
+    return arr;
+  }
+
+  tileClick(sym) {
+    if (!sym) return;
+    this.toggleTile(false);
+    this.selectSymbol(sym);
+  }
+
+  renderTiles() {
+    if (!STATE.tileMode) return;
+    const grid = document.getElementById('tileGrid');
+    if (!grid) return;
+    // 图多时降到约 1 秒一次，且只画视口内的
+    if (STATE.tileCount > 20) {
+      const t = Date.now();
+      if (t - (this._lastTileRender || 0) < 900) return;
+      this._lastTileRender = t;
+    }
+    for (let i = 0; i < grid.children.length; i++) {
+      const tile = grid.children[i];
+      const sym = tile.dataset.sym;
+      if (!sym) continue;
+      if (tile._visible === false) continue;      // 视口外不重绘
+      // 表头：名次 / 币种 / 本级涨幅
+      const rank = STATE.boardRank[sym];
+      const rankEl = tile.querySelector('.tile-rank');
+      const gainEl = tile.querySelector('.tile-gain');
+      const rText = rank ? '#' + rank : '--';
+      if (rankEl._last !== rText) { rankEl._last = rText; rankEl.textContent = rText; }
+      const b = STATE.buckets[sym];
+      const g = (b && isFinite(b.gain)) ? b.gain : null;
+      const gText = g == null ? '--' : (g >= 0 ? '+' : '') + g.toFixed(2) + '%';
+      if (gainEl._last !== gText) {
+        gainEl._last = gText;
+        gainEl.textContent = gText;
+        gainEl.style.color = g == null ? 'var(--text-secondary)' : (g >= 0 ? 'var(--green)' : 'var(--red)');
+      }
+      const cv = tile.querySelector('canvas');
+      if (cv) this.renderTile(cv, sym);
+    }
+  }
+
+  // 单张小图渲染：蜡烛 + 本K开盘基准线 +（可选）MACD 副图
+  renderTile(cv, sym) {
+    const wrap = cv.parentElement;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if (!w || !h) return;
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const bars = Math.max(24, Math.min(120, Math.round((w - 40) / 7)));   // 图宽固定时用更少更粗的蜡烛，看得更清楚
+    const arr = this.tileCandles(sym, bars);
+    if (arr.length < 2) {
+      ctx.fillStyle = '#848e9c';
+      ctx.font = '11px -apple-system,sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(STATE.tilePending[sym] ? '加载中…' : '等待数据', w / 2, h / 2);
+      return;
+    }
+    const padR = 34, padL = 3, padT = 20, padB = 4, gap = 4;
+    const totalH = h - padT - padB;
+    const showMacd = STATE.tileMacd && h >= 170;
+    const macdH = showMacd ? Math.max(28, Math.round(totalH * 0.26)) : 0;
+    const priceTop = padT;
+    const priceBot = h - padB - (macdH ? macdH + gap : 0);
+    const plotW = Math.max(30, w - padL - padR);
+    const n = arr.length;
+
+    let max = -Infinity, min = Infinity;
+    for (const c of arr) { if (c.high > max) max = c.high; if (c.low < min) min = c.low; }
+    if (!(max > min)) { max += 1e-9; min -= 1e-9; }
+    const pad = (max - min) * 0.07;
+    max += pad; min -= pad;
+    const yOf = p => priceBot - (p - min) / (max - min) * (priceBot - priceTop);
+    const cw = plotW / n;
+
+    // 蜡烛
+    const bodyW = Math.max(1.5, Math.min(cw * 0.72, 14));
+    for (let i = 0; i < n; i++) {
+      const c = arr[i];
+      const up = c.close >= c.open;
+      const col = up ? '#0ecb81' : '#f6465d';
+      const x = padL + i * cw + cw / 2;
+      ctx.strokeStyle = col;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(x) + 0.5, yOf(c.high));
+      ctx.lineTo(Math.round(x) + 0.5, yOf(c.low));
+      ctx.stroke();
+      const yo = yOf(c.open), yc = yOf(c.close);
+      const top = Math.min(yo, yc), bh = Math.max(1, Math.abs(yc - yo));
+      ctx.fillRect(Math.round(x - bodyW / 2), Math.round(top), Math.round(bodyW), Math.round(bh));
+    }
+
+    // 本K开盘基准线（策略口径：开盘 → 现价）
+    const live = arr[arr.length - 1];
+    if (live && live.open > 0) {
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(240,185,11,0.7)';
+      const yOpen = Math.round(yOf(live.open)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(padL, yOpen); ctx.lineTo(padL + plotW, yOpen); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // 价格刻度（最高/最低/现价）
+    ctx.font = '10px Consolas,monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#848e9c';
+    ctx.fillText(fmtPrice(max - pad), padL + plotW + 3, priceTop + 5);
+    ctx.fillText(fmtPrice(min + pad), padL + plotW + 3, priceBot - 5);
+    if (live) {
+      const upNow = live.close >= live.open;
+      ctx.fillStyle = upNow ? '#0ecb81' : '#f6465d';
+      ctx.fillText(fmtPrice(live.close), padL + plotW + 3, Math.max(priceTop + 6, Math.min(priceBot - 6, yOf(live.close))));
+    }
+
+    // MACD 副图
+    if (macdH) {
+      const macdTop = priceBot + gap, macdBot = macdTop + macdH;
+      const p = STATE.macdParams;
+      const m = this.computeMACD(arr, p.fast, p.slow, p.signal);
+      let mmax = 0, mmin = 0;
+      for (let i = 0; i < n; i++) {
+        mmax = Math.max(mmax, m.dif[i], m.dea[i], m.hist[i]);
+        mmin = Math.min(mmin, m.dif[i], m.dea[i], m.hist[i]);
+      }
+      const mp = (mmax - mmin) * 0.12 || Math.abs(mmax || mmin) * 0.1 || 1;
+      mmax += mp; mmin -= mp;
+      const yM = v => macdBot - (v - mmin) / (mmax - mmin) * (macdBot - macdTop);
+      const yZero = Math.round(yM(0)) + 0.5;
+      ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+      ctx.beginPath(); ctx.moveTo(padL, yZero); ctx.lineTo(padL + plotW, yZero); ctx.stroke();
+      for (let i = 0; i < n; i++) {
+        const v = m.hist[i];
+        const bw = Math.max(1, cw * 0.55);
+        const x = padL + i * cw + Math.max(0.5, cw * 0.2);
+        const yv = yM(v);
+        ctx.fillStyle = v >= 0 ? 'rgba(14,203,129,0.55)' : 'rgba(246,70,93,0.55)';
+        if (v >= 0) ctx.fillRect(x, yv, bw, Math.max(1, yZero - yv));
+        else ctx.fillRect(x, yZero, bw, Math.max(1, yv - yZero));
+      }
+      const line = (arr2, color) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const x = padL + i * cw + cw / 2, y = yM(arr2[i]);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      };
+      line(m.dea, '#1e80ff');
+      line(m.dif, '#f0b90b');
+    }
   }
 
   selectSymbol(sym) {
@@ -1769,6 +2715,8 @@ class GainBoard {
     if (!STATE.chartPanelOpen) this.toggleChart(true);
     this.updateChartHeader();
     this.highlightRow(sym);
+    const sel = document.getElementById('chartPickSelect');
+    if (sel) sel.value = sym;
     this.renderChart();
   }
 
@@ -1781,9 +2729,9 @@ class GainBoard {
   async fetchChartHistory(sym) {
     const info = levelInfo();
     // 多取 60 根做预热，保证 MACD(12,26,9) 的 EMA 收敛
-    const need = Math.min(1000, (STATE.chartVisible + 60) * info.group + info.group);
+    const need = Math.min(400, (STATE.chartVisible + 60) * info.group + info.group);   // ≥500 权重翻倍，封顶 400
     try {
-      const candles = await BinanceAPI.getKlines(sym, info.base, need);
+      const candles = await BinanceAPI.getKlines(sym, info.base, need, true);
       if (STATE.chartSymbol !== sym) return;
       STATE.chartBase = candles;
       STATE.chartCandles = this.aggregateLevel(candles, STATE.level);
@@ -1916,7 +2864,7 @@ class GainBoard {
       const ro = new ResizeObserver(function() { self.renderChart(); });
       ro.observe(wrap);
     } else {
-      window.addEventListener('resize', function() { self.renderChart(); });
+      window.addEventListener('resize', function() { self.renderChart(); self.tileLayout(); self.renderTiles(); });
     }
   }
 
@@ -2252,11 +3200,12 @@ class GainBoard {
     };
     const workers = [];
     for (let i = 0; i < 8; i++) workers.push(worker());
-    await Promise.all(workers);
-    if (!alive()) return;
-    STATE.macdScan.active = false;
-    this.refreshBoard(false);
-    this.updateStats();
+    try {
+      await Promise.all(workers);
+    } finally {
+      STATE.macdScan.active = false;
+      if (alive()) { this.refreshBoard(false); this.updateStats(); }
+    }
   }
 
   macdHistoryLimit(info) {
@@ -2304,6 +3253,14 @@ class GainBoard {
     document.getElementById('statAlerts').textContent = STATE.alertLog.length;
     document.getElementById('statUniverse').textContent = STATE.universe.length;
     document.getElementById('statShown').textContent = STATE.displayed.length;
+    // 权重用量（限流诊断用）
+    const wEl = document.getElementById('statWeight');
+    if (wEl) {
+      const used = BinanceAPI.usedWeight();
+      const cap = BinanceAPI.weightCap();
+      wEl.textContent = used + '/' + cap + (BinanceAPI._budgetFactor < 1 ? ' ⚠️降速' : '');
+      wEl.style.color = used > cap * 0.9 ? 'var(--red)' : (used > cap * 0.6 ? 'var(--yellow)' : 'var(--green)');
+    }
   }
 
   updateKlineClock() {
@@ -2521,12 +3478,24 @@ class GainBoard {
     document.getElementById('alertCooldown').value = STATE.alertCooldownSec;
     document.getElementById('soundEnabled').checked = STATE.soundEnabled;
     document.getElementById('notifyEnabled').checked = STATE.notifyEnabled;
+    const ve = document.getElementById('voiceEnabled');
+    if (ve) ve.checked = STATE.voiceEnabled;
+    const vm = document.getElementById('voiceMinLevel');
+    if (vm) vm.value = STATE.voiceMinLevel;
+    const vr = document.getElementById('voiceRate');
+    if (vr) vr.value = STATE.voiceRate;
+    const vh = document.getElementById('voiceHint');
+    if (vh) vh.textContent = VoiceManager.supported()
+      ? ('使用浏览器内置语音合成（Web Speech API），离线可用。当前音色：' + VoiceManager.voiceName())
+      : '⚠️ 当前浏览器不支持语音合成，请改用 Chrome / Edge。';
     document.getElementById('dingtalkEnabled').checked = STATE.dingtalkEnabled;
     document.getElementById('dingtalkWebhook').value = STATE.dingtalkWebhook;
     document.getElementById('dingtalkCorsProxy').value = STATE.dingtalkCorsProxy;
     document.getElementById('dingtalkPushLevel').value = STATE.dingtalkPushLevel;
     const sel = document.getElementById('thresholdPreset');
     if (sel) sel.value = STATE.thresholdPreset;
+    const mv = document.getElementById('minVolSelect');
+    if (mv) mv.value = String(STATE.minVol);
   }
 
   saveSettings() {
@@ -2543,6 +3512,13 @@ class GainBoard {
     STATE.alertCooldownSec = parseInt(document.getElementById('alertCooldown').value, 10) || 30;
     STATE.soundEnabled = document.getElementById('soundEnabled').checked;
     STATE.notifyEnabled = document.getElementById('notifyEnabled').checked;
+    const vEn = document.getElementById('voiceEnabled');
+    if (vEn) STATE.voiceEnabled = vEn.checked;
+    const vLv = document.getElementById('voiceMinLevel');
+    if (vLv) STATE.voiceMinLevel = vLv.value;
+    const vRt = document.getElementById('voiceRate');
+    if (vRt) STATE.voiceRate = Math.min(2, Math.max(0.5, parseFloat(vRt.value) || 1.15));
+    this.updateVoiceUI();
     STATE.dingtalkEnabled = document.getElementById('dingtalkEnabled').checked;
     STATE.dingtalkWebhook = document.getElementById('dingtalkWebhook').value.trim();
     STATE.dingtalkCorsProxy = document.getElementById('dingtalkCorsProxy').value.trim();
@@ -2641,6 +3617,9 @@ class GainBoard {
       BinanceAPI.clearQueue('refresh');
       STATE.buckets = {};
       STATE.macdState = {};
+      STATE.macdPending = {};
+      STATE.prefillMacd = { active: false, done: 0, total: 0 };
+      STATE.priorSymbols = STATE.displayed.slice(0, 240);
       STATE.alertCooldown = {};
       STATE.restFixQueue.clear();
       this.rowRefs = {};
@@ -2673,7 +3652,9 @@ class GainBoard {
       if (blocked > 0) {
         this.setStatus('⏸ 币安限流，暂停 ' + Math.ceil(blocked/1000) + 's', 'var(--red)');
       } else if (STATE.prefill.active) {
-        this.setStatus('校准 ' + STATE.prefill.done + '/' + STATE.prefill.total + (STATE.prefill.macd ? ' · 含MACD' : ''), 'var(--yellow)');
+        this.setStatus('加载K线 ' + STATE.prefill.done + '/' + STATE.prefill.total, 'var(--yellow)');
+      } else if (STATE.prefillMacd.active) {
+        this.setStatus('补 MACD ' + STATE.prefillMacd.done + '/' + STATE.prefillMacd.total, 'var(--text-secondary)');
       } else if (STATE.macdScan.active) {
         this.setStatus('MACD扫描 ' + STATE.macdScan.done + '/' + STATE.macdScan.total, 'var(--yellow)');
       } else if (STATE.initDone) {
@@ -2709,7 +3690,18 @@ document.addEventListener('click', (e) => {
   if (modal && e.target === modal) modal.style.display = 'none';
 });
 
-// 快捷键：1..9/0 切换级别，m 静音，r 刷新，s 设置，a 告警面板，Esc 关闭弹窗
+// 窗口尺寸变化 → 重排平铺网格
+window.addEventListener('resize', function() { if (STATE.tileMode) { app.tileLayout(); app.renderTiles(); } });
+
+// 首次交互解锁语音（部分浏览器要求用户手势后才能发声）
+['click', 'keydown', 'touchstart'].forEach(function(evt) {
+  window.addEventListener(evt, function once() {
+    VoiceManager.unlock();
+    window.removeEventListener(evt, once);
+  }, { once: true, passive: true });
+});
+
+// 快捷键：1..9/0 切换级别，m 静音，v 语音播报，r 刷新，s 设置，a 告警面板，Esc 关闭弹窗
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const tag = (e.target && e.target.tagName) || '';
@@ -2719,10 +3711,17 @@ document.addEventListener('keydown', (e) => {
   if (k === '0') { app.setLevel(CONFIG.LEVELS[9]); return; }
   switch (k.toLowerCase()) {
     case 'm': app.toggleMute(); break;
+    case 'v': app.toggleVoice(); break;
+    case 'f': app.toggleChartFull(); break;
+    case 't': app.toggleTile(); break;
     case 'r': app.manualRefresh(); break;
     case 's': app.toggleSettings(); break;
     case 'a': app.toggleAlertPanel(); break;
-    case 'escape': app.closePerCoinPopup(); break;
+    case 'escape':
+      if (STATE.tileMode) app.toggleTile(false);
+      else if (STATE.chartFull) app.toggleChartFull(false);
+      else app.closePerCoinPopup();
+      break;
   }
 });
 </script>
